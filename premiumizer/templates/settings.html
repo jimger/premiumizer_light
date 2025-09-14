@@ -216,10 +216,6 @@
                                data-size="small">
                     {% endif %}
                     <p>&nbsp;</p>
-                    <label for="nzbtomedia_location">path to nzbToMedia.py in the nzbToMedia folder:</label>
-                    <input type="text" autocomplete="off" class="form-control" name="nzbtomedia_location"
-                           aria-describedby="basic-addon1"
-                           value="{{ settings.get('downloads', 'nzbtomedia_location') }}">
                 </div>
                 <p>&nbsp;</p>
                 <fieldset>
@@ -416,15 +412,6 @@
                             <input type="checkbox" class="form-control bootstrap_switch"
                                    name="{{ "cat_delsample["+x|string+"]" }}"
                                    data-size="small" data-label-text="Delete samples">
-                        {% endif %}
-                        {% if  settings.get('categories', 'cat_nzbtomedia['+x|string+']')    == '1' %}
-                            <input type="checkbox" class="form-control bootstrap_switch"
-                                   name="{{ "cat_nzbtomedia["+x|string+"]" }}"
-                                   data-size="small" data-label-text="NZBtomedia" checked>
-                        {% else %}
-                            <input type="checkbox" class="form-control bootstrap_switch"
-                                   name="{{ "cat_nzbtomedia["+x|string+"]" }}"
-                                   data-size="small" data-label-text="NZBtomedia">
                         {% endif %}
                     </div>
                 {% endfor %}

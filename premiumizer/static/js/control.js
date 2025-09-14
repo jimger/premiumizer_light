@@ -127,11 +127,6 @@ function update_task(task) {
         stateStr = 'Failed: download';
         stateIcon = 'desktop';
         categoryState = '';
-    } else if ((task.cloud_status == 'finished' || task.cloud_status == 'seeding') && task.local_status == 'failed: nzbToMedia') {
-        stateColor = 'danger';
-        stateStr = 'Failed: nzbToMedia';
-        stateIcon = 'desktop';
-        categoryState = '';
     } else if ((task.cloud_status == 'finished' || task.cloud_status == 'seeding') && task.local_status == 'failed: Filehost') {
         stateColor = 'danger';
         stateStr = 'Failed: Filehost';

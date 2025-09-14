@@ -402,13 +402,6 @@ class PremConfig:
 
         else:
             self.download_builtin = 1
-        if os.path.isfile(os.path.join(rootdir, 'conf', 'nzbToMedia', 'NzbToMedia.py')):
-            self.nzbtomedia_location = (os.path.join(rootdir, 'conf', 'nzbtomedia', 'NzbToMedia.py'))
-            prem_config.set('downloads', 'nzbtomedia_location', self.nzbtomedia_location)
-            with open(os.path.join(ConfDir, 'settings.cfg'), 'w') as configfile:
-                prem_config.write(configfile)
-        else:
-            self.nzbtomedia_location = prem_config.get('downloads', 'nzbtomedia_location')
         self.watchdir_enabled = prem_config.getboolean('upload', 'watchdir_enabled')
         self.watchdir_location = prem_config.get('upload', 'watchdir_location')
         if self.watchdir_enabled:
@@ -440,9 +433,8 @@ class PremConfig:
                     cat_ext = prem_config.get('categories', ('cat_ext' + str([x]))).split(',')
                     cat_ext_blacklist = prem_config.getboolean('categories', ('cat_ext_blacklist' + str([x])))
                     cat_delsample = prem_config.getboolean('categories', ('cat_delsample' + str([x])))
-                    cat_nzbtomedia = prem_config.getboolean('categories', ('cat_nzbtomedia' + str([x])))
                     cat = {'name': cat_name, 'dir': cat_dir, 'ext': cat_ext, 'ext_blacklist': cat_ext_blacklist,
-                           'delsample': cat_delsample, 'nzb': cat_nzbtomedia}
+                           'delsample': cat_delsample}
                     self.categories.append(cat)
                     self.download_categories += str(cat_name + ',')
                     if self.download_enabled:
@@ -568,7 +560,7 @@ def check_update(auto_update=cfg.auto_update):
                 if auto_update:
                     for task in tasks:
                         if task.local_status == (
-                                'downloading' or 'queued' or 'failed: download' or 'failed: nzbToMedia'):
+                                'downloading' or 'queued' or 'failed: download'):
                             scheduler.scheduler.reschedule_job('check_update', trigger='interval', minutes=30)
                             logger.info(
                                 'Tried to update but downloads are not done or failed, trying again in 30 minutes')
@@ -912,31 +904,6 @@ def clean_name(original):
     cleaned_filename = unicodedata.normalize('NFKD', to_unicode(original)).encode('ASCII', 'ignore').decode('utf8')
     valid_string = ''.join(c for c in cleaned_filename if c in valid_chars)
     return ' '.join(valid_string.split())
-
-
-def notify_nzbtomedia():
-    logger.debug('def notify_nzbtomedia started')
-    if os.path.isfile(cfg.nzbtomedia_location):
-        try:
-            subprocess.check_output(
-                ['python', cfg.nzbtomedia_location, greenlet.task.dldir, greenlet.task.name, greenlet.task.category,
-                 greenlet.task.id, 'generic'],
-                stderr=subprocess.STDOUT, shell=False, encoding='utf8').rstrip('\n')
-            returncode = 0
-            logger.info('Send to nzbToMedia: %s -- id: %s', greenlet.task.name, greenlet.task.id)
-        except subprocess.CalledProcessError as e:
-            logger.error('nzbToMedia failed for: %s -- id: %s', greenlet.task.name, greenlet.task.id)
-            errorstr = ''
-            tmp = str.splitlines(e.output)
-            for line in tmp:
-                if '[ERROR]' in line:
-                    errorstr += line
-            logger.error('%s: output: %s', greenlet.task.name, errorstr)
-            returncode = 1
-    else:
-        logger.error('Error unable to locate nzbToMedia.py for: %s', greenlet.task.name)
-        returncode = 1
-    return returncode
 
 
 def send_notification(subject, text=None, send_email=cfg.email_enabled, send_push=cfg.apprise_enabled):
@@ -1631,10 +1598,6 @@ def download_task(task):
         logger.info('Download finished: %s -- id: %s -- info: %s --  %s --  %s -- location: %s', task.name, task.id,
                     utils.sizeof_human(task.size), greenlet.avgspeed, utils.time_human(task.dltime, fmt_short=True),
                     task.dldir)
-        if task.dlnzbtomedia:
-            failed = notify_nzbtomedia()
-            if failed:
-                task.update(local_status='failed: nzbToMedia')
 
     if task.local_status != 'stopped' and task.local_status != 'waiting' and task.local_status != 'paused':
         if not failed:
@@ -1833,12 +1796,12 @@ def parse_tasks(transfers):
                                 if len(breadcrumbs) > 1:
                                     if breadcrumbs[1]['name'] == 'Feed Downloads':
                                         if breadcrumbs[2]['name'] in cfg.download_categories:
-                                            dldir, dlext, dlext_blacklist, delsample, dlnzbtomedia = get_cat_var(
+                                            dldir, dlext, dlext_blacklist, delsample = get_cat_var(
                                                 breadcrumbs[2]['name'])
                                             task.update(name=name, cloud_status=transfer['status'], local_status=None,
                                                         process=None, speed=None, category=breadcrumbs[2]['name'],
                                                         dldir=dldir, dlext=dlext, dlext_blacklist=dlext_blacklist,
-                                                        delsample=delsample, dlnzbtomedia=dlnzbtomedia, type='RSS')
+                                                        delsample=delsample, type='RSS')
                                         else:
                                             logger.warning('RSS feed name not in categories: %s',
                                                            breadcrumbs[2]['name'])
@@ -1958,7 +1921,6 @@ def get_cat_var(category):
     dlext = None
     dlext_blacklist = None
     delsample = 0
-    dlnzbtomedia = 0
     if any(cat['name'] == category for cat in cfg.categories):
         for cat in cfg.categories:
             if cat['name'] == category:
@@ -1966,18 +1928,17 @@ def get_cat_var(category):
                 dlext = cat['ext']
                 dlext_blacklist = cat['ext_blacklist']
                 delsample = cat['delsample']
-                dlnzbtomedia = cat['nzb']
     else:
         if category != '':
             logger.debug('%s not found in categories', category)
-    return dldir, dlext, dlext_blacklist, delsample, dlnzbtomedia
+    return dldir, dlext, dlext_blacklist, delsample
 
 
 def add_task(id, size, name, category, type='', folder_id=None):
     logger.debug('def add_task started')
     exists = get_task(id, name)
     if not exists:
-        dldir, dlext, dlext_blacklist, delsample, dlnzbtomedia = get_cat_var(category)
+        dldir, dlext, dlext_blacklist, delsample = get_cat_var(category)
         try:
             name = urllib.parse.unquote(name)
             name = clean_name(name)
@@ -1992,7 +1953,7 @@ def add_task(id, size, name, category, type='', folder_id=None):
         except:
             pass
         task = DownloadTask(socketio.emit, id, folder_id, size, name, category, dldir, dlext, dlext_blacklist,
-                            delsample, dlnzbtomedia, type)
+                            delsample, type)
         tasks.append(task)
         if not task.type == 'Filehost':
             logger.info('Added: %s -- Category: %s -- Type: %s -- id: %s', task.name, task.category, task.type, task.id)
@@ -2296,7 +2257,7 @@ def history():
                     id = line.split("id: ", 1)[1].splitlines()[0]
                     history.append(
                         {'id': id, 'date': taskdate, 'name': taskname, 'category': taskcat, 'type': tasktype,
-                         'downloaded': '', 'deleted': '', 'nzbtomedia': '', 'email': '', 'info': '', })
+                         'downloaded': '', 'deleted': '', 'email': '', 'info': '', })
                 elif 'Downloading:' in line:
                     history_update(history, line, 'check_name', '')
                 elif 'Download finished:' in line:
@@ -2305,8 +2266,6 @@ def history():
                     history_update(history, line, 'info', taskinfo)
                 elif 'Deleted' in line:
                     history_update(history, line, 'deleted', '1')
-                elif 'Send to nzbToMedia:' in line:
-                    history_update(history, line, 'nzbtomedia', '1')
                 elif 'Email send for:' in line:
                     history_update(history, line, 'email', '1')
                 elif 'Category set to:' in line:
@@ -2316,8 +2275,6 @@ def history():
                     history_update(history, line, 'downloaded', '0')
                 elif 'Download could not be deleted from the cloud for:' in line:
                     history_update(history, line, 'deleted', '0')
-                elif 'nzbToMedia failed for:' in line or 'Error unable to locate nzbToMedia.py for:' in line:
-                    history_update(history, line, 'nzbtomedia', '0')
                 elif 'Email error for:' in line:
                     history_update(history, line, 'email', '0')
     except:
@@ -2463,7 +2420,6 @@ def settings():
             prem_config.set('downloads', 'download_speed', request.form.get('download_speed'))
             prem_config.set('downloads', 'remove_cloud_delay', request.form.get('remove_cloud_delay'))
             prem_config.set('upload', 'watchdir_location', request.form.get('watchdir_location'))
-            prem_config.set('downloads', 'nzbtomedia_location', request.form.get('nzbtomedia_location'))
             for x in range(1, 7):
                 prem_config.set('categories', ('cat_name' + str([x])), request.form.get('cat_name' + str([x])))
                 prem_config.set('categories', ('cat_dir' + str([x])), request.form.get('cat_dir' + str([x])))
@@ -2476,10 +2432,6 @@ def settings():
                     prem_config.set('categories', ('cat_delsample' + str([x])), '1')
                 else:
                     prem_config.set('categories', ('cat_delsample' + str([x])), '0')
-                if request.form.get('cat_nzbtomedia' + str([x])):
-                    prem_config.set('categories', ('cat_nzbtomedia' + str([x])), '1')
-                else:
-                    prem_config.set('categories', ('cat_nzbtomedia' + str([x])), '0')
 
             with open(os.path.join(ConfDir, 'settings.cfg'), 'w') as configfile:
                 prem_config.write(configfile)
@@ -2733,11 +2685,11 @@ def handle_json(json):
 def change_category(message):
     data = message['data']
     task = get_task(data['id'])
-    dldir, dlext, dlext_blacklist, delsample, dlnzbtomedia = get_cat_var(data['category'])
+    dldir, dlext, dlext_blacklist, delsample = get_cat_var(data['category'])
     if task.type == 'Filehost':
         if task.local_status != 'failed: Filehost':
             task.update(local_status=None, process=None, speed=None, category=data['category'], dldir=dldir,
-                        dlext=dlext, dlext_blacklist=dlext_blacklist, delsample=delsample, dlnzbtomedia=dlnzbtomedia)
+                        dlext=dlext, dlext_blacklist=dlext_blacklist, delsample=delsample)
             if cfg.download_enabled:
                 if task.category in cfg.download_categories:
                     if not task.local_status == ('queued' or 'downloading'):
@@ -2748,7 +2700,7 @@ def change_category(message):
                                                     jobstore='downloads', executor='downloads', replace_existing=True)
     else:
         task.update(local_status=None, process=None, speed=None, category=data['category'], dldir=dldir, dlext=dlext,
-                    dlext_blacklist=dlext_blacklist, delsample=delsample, dlnzbtomedia=dlnzbtomedia)
+                    dlext_blacklist=dlext_blacklist, delsample=delsample)
         logger.info('Task: %s -- id: %s -- Category set to: %s', task.name, task.id, task.category)
         scheduler.scheduler.reschedule_job('update', trigger='interval', seconds=1)
 
