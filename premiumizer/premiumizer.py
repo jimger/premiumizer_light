@@ -531,6 +531,7 @@ def downloader_connection():
 # Automatic update checker
 def check_update(auto_update=cfg.auto_update):
     logger.debug('def check_update started')
+    return # TODO Fix update
     time_job = scheduler.scheduler.get_job('check_update').next_run_time.replace(tzinfo=None)
     time_now = datetime.now()
     diff = time_job - time_now
@@ -2708,6 +2709,8 @@ def change_category(message):
 # start the server with the 'run()' method
 logger.info('Starting server on %s:%s ', prem_config.get('global', 'bind_ip'),
             prem_config.getint('global', 'server_port'))
+
+
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, terminateProcess)
     signal.signal(signal.SIGTERM, terminateProcess)
@@ -2723,6 +2726,7 @@ if __name__ == '__main__':
         scheduler.start()
         scheduler.scheduler.add_job(update, 'interval', id='update',
                                     seconds=active_interval, replace_existing=True, max_instances=1, coalesce=True)
+
         if not os_arg == '--docker':
             scheduler.scheduler.add_job(check_update, 'interval', id='check_update', seconds=1, replace_existing=True,
                                         max_instances=1, coalesce=True)
